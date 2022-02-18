@@ -6,7 +6,6 @@
 #include <Wspiapi.h>
 #include <mswsock.h>
 #include <strsafe.h>
-#include <stdio.h>
 #include <assert.h>
 
 #define MNET_SOCK_BUFFER_SIZE 4096

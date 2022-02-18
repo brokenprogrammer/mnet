@@ -316,9 +316,10 @@ MNetConnect(mnet_sock *Socket, char *Address, int Port)
     }
     else
     {
-        int rc = setsockopt(Client->Socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
-        if (rc != 0) {
-            printf("SO_UPDATE_CONNECT_CONTEXT failed: %d\n", WSAGetLastError());
+        int ReturnCode = setsockopt(Client->Socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
+        if (ReturnCode != 0) 
+        {
+            Win32OutputWSAErrorCode("Set socket options failed.");
             return -1;
         }
 
@@ -631,7 +632,6 @@ _MNetUpdateServer(mnet_sock *Socket)
     // NOTE(Oskar): Close connection
     if (OverlappedResult == FALSE || BytesTransferred == 0)
     {
-        // printf("Closing socket %d\n", (int)SocketConnection->Socket);
         Socket->Events[Socket->NumberOfEvents++] = _MNetCreateCloseEvent(SocketConnection);
 
         if (closesocket(SocketConnection->Socket) == SOCKET_ERROR)
@@ -706,9 +706,10 @@ _MNetUpdateClient(mnet_sock *Socket)
     {
         case MNET_QUEUED_OPERATION_CONNECT:
         {
-            int rc = setsockopt(Client->Socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
-            if (rc != 0) {
-                printf("SO_UPDATE_CONNECT_CONTEXT failed: %d\n", WSAGetLastError());
+            int ReturnCode = setsockopt(Client->Socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
+            if (ReturnCode != 0) 
+            {
+                Win32OutputWSAErrorCode("Set socket options failed.");
                 return;
             }
 
