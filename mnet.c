@@ -256,6 +256,7 @@ MNetConnect(mnet_sock *Socket, char *Address, int Port)
     Socket->TimeoutMS = 25;
     Socket->Client = (mnet_client_sock *)MNET_ALLOC(sizeof(mnet_client_sock));
     mnet_client_sock *Client = Socket->Client;
+    Client->QueuedForClose = 0;
     Socket->Initialized = 0;
 
     Client->Socket = _MNetCreateSocket(AF_INET, SOCK_STREAM, 0);
@@ -449,11 +450,18 @@ MNetSend(mnet_client_sock *Target, char *Buffer, size_t BufferLength)
     return 0;
 }
 
+void
+MNetQueueClose(mnet_client_sock *Target)
+{
+    Target->QueuedForClose = 1;
+}
+
 static void
 _MNetCreateServerConnection(mnet_client_sock *Target, SOCKET LastAcceptSocket)
 {
     Target->Socket = LastAcceptSocket;
     ZeroMemory(&(Target->Overlapped), sizeof(OVERLAPPED));
+    Target->QueuedForClose = 0;
     Target->Operation = MNET_QUEUED_OPERATION_NONE;
     Target->BytesSent = 0;
     Target->BytesReceived = 0;
@@ -540,6 +548,33 @@ _MNetUpdateServerConnectionState(mnet_sock *Socket,
 }
 
 void
+_MNetServerCloseClient(mnet_sock *Socket, mnet_client_sock *SocketConnection, DWORD ConnectionIndex)
+{
+    mnet_server_sock *Server = Socket->Server;
+    Socket->Events[Socket->NumberOfEvents++] = _MNetCreateCloseEvent(SocketConnection);
+
+    if (closesocket(SocketConnection->Socket) == SOCKET_ERROR)
+    {
+        Win32OutputWSAErrorCode("Call to closesocket Failed.");
+    }
+
+    MNET_FREE(SocketConnection);
+    WSACloseEvent(Server->EventArray[ConnectionIndex]);
+    
+    // NOTE(Oskar): Move event and socket handles to the back of their respective arrays.        
+    if (ConnectionIndex + 1 != Server->NumberOfEvents)
+    {
+        for (DWORD Index = ConnectionIndex; Index < Server->NumberOfEvents; Index++)
+        {
+            Server->EventArray[Index]  = Server->EventArray[Index + 1];   
+            Server->Connections[Index] = Server->Connections[Index + 1];
+        }
+    }
+
+    Server->NumberOfEvents--;
+}
+
+void
 _MNetUpdateServer(mnet_sock *Socket)
 {
     mnet_server_sock *Server = Socket->Server;
@@ -553,6 +588,18 @@ _MNetUpdateServer(mnet_sock *Socket)
     {
         // NOTE(Oskar): If not first pass we will clear all events.
         Socket->NumberOfEvents = 0;
+    }
+
+    // NOTE(Oskar): Check for idle sockets that are queued to close
+    for (DWORD Index = 1; Index < Server->NumberOfEvents; ++Index)
+    {
+        mnet_client_sock *Connection = Server->Connections[Index];
+        int SocketUpForClose = (Connection->Operation == MNET_QUEUED_OPERATION_NONE && 
+                                Connection->QueuedForClose);
+        if (SocketUpForClose)
+        {
+            _MNetServerCloseClient(Socket, Connection, Index);
+        }
     }
 
     mnet_client_sock *SocketConnection;
@@ -632,27 +679,28 @@ _MNetUpdateServer(mnet_sock *Socket)
     // NOTE(Oskar): Close connection
     if (OverlappedResult == FALSE || BytesTransferred == 0)
     {
-        Socket->Events[Socket->NumberOfEvents++] = _MNetCreateCloseEvent(SocketConnection);
+        _MNetServerCloseClient(Socket, SocketConnection, EventIndex);
+        // Socket->Events[Socket->NumberOfEvents++] = _MNetCreateCloseEvent(SocketConnection);
 
-        if (closesocket(SocketConnection->Socket) == SOCKET_ERROR)
-        {
-            Win32OutputWSAErrorCode("Call to closesocket Failed.");
-        }
+        // if (closesocket(SocketConnection->Socket) == SOCKET_ERROR)
+        // {
+        //     Win32OutputWSAErrorCode("Call to closesocket Failed.");
+        // }
 
-        MNET_FREE(SocketConnection);
-        WSACloseEvent(Server->EventArray[EventIndex]);
+        // MNET_FREE(SocketConnection);
+        // WSACloseEvent(Server->EventArray[EventIndex]);
         
-        // NOTE(Oskar): Move event and socket handles to the back of their respective arrays.        
-        if (EventIndex + 1 != Server->NumberOfEvents)
-        {
-            for (DWORD Index = EventIndex; Index < Server->NumberOfEvents; Index++)
-            {
-                Server->EventArray[Index]  = Server->EventArray[Index + 1];   
-                Server->Connections[Index] = Server->Connections[Index + 1];
-            }
-        }
+        // // NOTE(Oskar): Move event and socket handles to the back of their respective arrays.        
+        // if (EventIndex + 1 != Server->NumberOfEvents)
+        // {
+        //     for (DWORD Index = EventIndex; Index < Server->NumberOfEvents; Index++)
+        //     {
+        //         Server->EventArray[Index]  = Server->EventArray[Index + 1];   
+        //         Server->Connections[Index] = Server->Connections[Index + 1];
+        //     }
+        // }
 
-        Server->NumberOfEvents--;
+        // Server->NumberOfEvents--;
         return;
     }
 

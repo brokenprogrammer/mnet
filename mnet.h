@@ -34,6 +34,7 @@ typedef struct _mnet_client_sock
     WSAOVERLAPPED Overlapped;
 
     mnet_queued_operation Operation;
+    int QueuedForClose;
 } mnet_client_sock;
 
 typedef struct _mnet_server_sock
@@ -133,6 +134,7 @@ void MNetUpdate(mnet_sock *Socket);
 
 int MNetRecieve(mnet_client_sock *Target);
 int MNetSend(mnet_client_sock *Target, char *Buffer, size_t BufferLength);
+void MNetQueueClose(mnet_client_sock *Target);
 
 // TODO(Oskar): Functions to get states / data and modify them for example timeout.
 // TODO(Oskar): Turn some errors into non-fatal events.

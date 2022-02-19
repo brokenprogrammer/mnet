@@ -1,8 +1,4 @@
-#pragma comment (lib, "gdi32.lib")
 #pragma comment (lib, "user32.lib")
-#pragma comment (lib, "dxguid.lib")
-#pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "ws2_32.lib")
 
 #define MNET_CUSTOM_LOGGING
